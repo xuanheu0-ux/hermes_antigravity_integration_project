@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  hermes:
+    build:
+      context: ./hermes-agent
+      dockerfile: Dockerfile
+    container_name: hermes_local
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Persist Hermes data
+      - hermes_data:/opt/data
+      # Mount the user's VSCode workspace so Hermes can inspect local projects
+      - /home/matt/Documents/vscode:/opt/data/projects:ro
+    ports:
+      # Optional: if you want to expose Hermes web UI or API
+      - "8080:8080"
+      - "8000:8000"
+
+volumes:
+  hermes_data:
