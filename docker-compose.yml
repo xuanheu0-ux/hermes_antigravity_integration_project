@@ -17,7 +17,7 @@ services:
       # Persist Hermes data
       - hermes_data:/opt/data
       # Mount the user's VSCode workspace so Hermes can inspect local projects
-      - /home/matt/Documents/vscode:/opt/data/projects:ro
+      - /home/matt/Documents/vscode/hermes_shared_workspace:/opt/data/projects
     ports:
       # Optional: if you want to expose Hermes web UI or API
       - "8080:8080"

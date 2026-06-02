@@ -1,0 +1,19 @@
+# Hermes Ignore File
+# Drastically reduces the prompt size to speed up CPU inference
+
+node_modules/
+.git/
+.venv/
+venv/
+__pycache__/
+dist/
+build/
+.next/
+out/
+.cache/
+coverage/
+*.min.js
+*.min.css
+.vscode/
+.idea/
+.DS_Store
