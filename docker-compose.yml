@@ -7,8 +7,12 @@ services:
       dockerfile: Dockerfile
     container_name: hermes_local
     restart: unless-stopped
+    tty: true
+    stdin_open: true
     env_file:
       - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Persist Hermes data
       - hermes_data:/opt/data

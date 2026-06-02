@@ -3,7 +3,7 @@ set -e
 
 # Build and start the container in detached mode
 echo "Building and starting the Hermes Docker container..."
-docker-compose up --build -d
+docker compose up --build -d
 
 echo "Hermes container is running!"
 echo "Projects from /home/matt/Documents/vscode are mounted inside the container at /opt/data/projects"
