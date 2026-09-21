@@ -1,27 +1,110 @@
-version: '3.8'
+# Hermes (Nous Research agent) + Antigravity 2.0 integration — runtime stack.
+#
+# Design rules (these come from the upstream image contract, see README.md):
+#   1. We use the OFFICIAL image by default. Upstream's Dockerfile is a multi-stage
+#      build (pinned SQLite, uv, Node 26, Playwright) with an immutable /opt/hermes
+#      install tree — rebuilding it here is slow and pointless for this project.
+#      `docker-compose.build.yml` is the optional overlay if you want a derived image.
+#   2. Never override `entrypoint:`. The image's ENTRYPOINT is
+#      docker/entrypoint-dispatch.sh -> s6-overlay /init, which chowns the volume,
+#      seeds config, supervises the gateway and reaps zombies. Skipping it gives you
+#      an unsupervised gateway + `<defunct>` process leaks.
+#   3. `/opt/data` IS `HERMES_HOME` (config, keys, sessions, memory, skills).
+#      Anything large (the indexed project tree) must live OUTSIDE it: Hermes
+#      measures its own home dir and refuses over-eager trees.
+#   4. Anything published to the host is bound to 127.0.0.1 only. Hermes stores API
+#      keys in /opt/data and its dashboard has no auth on loopback.
+#
+# `./start-hermes.sh` wraps this file with preflight checks; prefer it over raw compose.
+#
+# Env vars are read from `.env` (copy `.env.example`).
+
+name: hermes-antigravity
 
 services:
   hermes:
-    build:
-      context: ./hermes-agent
-      dockerfile: Dockerfile
-    container_name: hermes_local
+    image: ${HERMES_IMAGE:-nousresearch/hermes-agent}:${HERMES_IMAGE_TAG:-latest}
+    container_name: ${HERMES_CONTAINER:-hermes_local}
     restart: unless-stopped
+    # `gateway run` is the supervised, always-on process. Its own CMD is a
+    # `sleep infinity` heartbeat, so `docker stop` stays clean and s6 keeps the
+    # real gateway alive. A bare `hermes` command here would exit instantly and
+    # `restart: unless-stopped` would crash-loop the container.
+    command: ["gateway", "run"]
     tty: true
     stdin_open: true
     env_file:
       - .env
+    environment:
+      HERMES_HOME: /opt/data
+      # Must own /opt/data on the host side, or you get "Permission denied" everywhere.
+      # Named volume -> defaults are fine (stage2 hook chowns on first boot).
+      # Bind mount to a host dir -> set HERMES_UID/HERMES_GID to `id -u` / `id -g`.
+      HERMES_UID: ${HERMES_UID:-10000}
+      HERMES_GID: ${HERMES_GID:-10000}
+      # OpenAI-compatible API server (the optional HTTP transport for the /hermes bridge).
+      # Off unless HERMES_API_ENABLED=true; API_SERVER_KEY is mandatory once enabled.
+      API_SERVER_ENABLED: ${HERMES_API_ENABLED:-false}
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_KEY: ${HERMES_API_KEY:-}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      # Lets the container reach an Ollama/vLLM running directly on the host (Linux).
+      - host.docker.internal:host-gateway
     volumes:
-      # Persist Hermes data
+      # Hermes home: everything persistent. Named volume by default.
       - hermes_data:/opt/data
-      # Mount the user's VSCode workspace so Hermes can inspect local projects
-      - /home/matt/Documents/vscode/hermes_shared_workspace:/opt/data/projects
+      # The drop zone: your local repos, exposed READ-ONLY and scoped on purpose.
+      # Hermes is told to work in /workspace/projects (see hermes-agent/dropzone/AGENTS.md).
+      - ${HERMES_DROPZONE:-./hermes_shared_workspace}:/workspace/projects:ro
+      # Read-write scratch so Hermes can write notes/answers without touching your repos.
+      - hermes_outbox:/workspace/outbox
     ports:
-      # Optional: if you want to expose Hermes web UI or API
-      - "8080:8080"
-      - "8000:8000"
+      # Loopback-only. 8642 = gateway OpenAI-compatible API (needs HERMES_API_ENABLED=true).
+      - 127.0.0.1:${HERMES_API_PORT:-8642}:8642
+      # 9119 = dashboard, only listens when HERMES_DASHBOARD=1.
+      - 127.0.0.1:${HERMES_DASHBOARD_PORT:-9119}:9119
+    healthcheck:
+      # Cheap and transport-independent: ask the supervised gateway for its status.
+      test: ["CMD-SHELL", "hermes gateway status >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          # Inference happens outside this container (Ollama/vLLM), so Hermes itself
+          # only needs moderate RAM. Browser tools need >= 2 GB if you enable them.
+          memory: ${HERMES_MEM_LIMIT:-2G}
+          cpus: "${HERMES_CPU_LIMIT:-2.0}"
+
+  # ------------------------------------------------------------------
+  # Optional local inference, enabled with:  docker compose --profile local-llm ...
+  # (or `./start-hermes.sh --local-llm`). Use this instead of host Ollama when
+  # host Ollama refuses connections from the container: it only listens on
+  # 127.0.0.1 by default, which is unreachable from inside a container network.
+  # ------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: hermes_ollama
+    profiles: ["local-llm"]
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      # CRITICAL for agents. Ollama truncates silently at its default window and the
+      # agent then "forgets" its instructions. Note the variable name:
+      #   OLLAMA_CONTEXT_LENGTH  -> current, works via the /v1 (OpenAI) endpoint
+      #   OLLAMA_NUM_CTX         -> legacy name, ignored by current releases AND
+      #                             dropped by the /v1 endpoint. Do not use it.
+      OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-16384}
+      # Keep the model resident between /hermes calls; CPU reloads are minutes.
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - 127.0.0.1:${OLLAMA_PORT:-11434}:11434
 
 volumes:
   hermes_data:
+  hermes_outbox:
+  ollama_models:

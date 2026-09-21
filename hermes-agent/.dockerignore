@@ -1,0 +1,9 @@
+# Build-context hygiene for hermes-agent/ (the Docker build context is this directory).
+# The context is tiny by design — templates + one hook — but keep the list explicit so a
+# stray clone of Hermes' source tree dropped in here can never end up in an image layer.
+.git
+.gitignore
+**/__pycache__
+**/*.pyc
+*.log
+.env
