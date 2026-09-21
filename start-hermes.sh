@@ -143,7 +143,7 @@ for f in AGENTS.md .hermesignore; do
     cp "hermes-agent/dropzone/$f" "$DROPZONE/$f" && ok "seeded $DROPZONE/$f"
   fi
 done
-n_projects="$(find "$DROPZONE" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) 2>/dev/null | wc -l | tr -d ' ')"
+n_projects="$(find "$DROPZONE" -mindepth 1 -maxdepth 1 \( -type d -o \( -type l -xtype d \) \) 2>/dev/null | wc -l | tr -d ' ')"
 if [ "${n_projects:-0}" = 0 ]; then
   warn "drop zone is empty — Hermes will know nothing about your projects.
   Add the repos you want indexed as SYMLINKS (never the whole ~/Documents/vscode:
@@ -151,7 +151,16 @@ if [ "${n_projects:-0}" = 0 ]; then
       ln -s ~/Documents/vscode/my-project '$DROPZONE/'"
 fi
 ok "rebuilding drop-zone index (keeps the system prompt small)"
-./scripts/hermes-index.sh --quiet || warn "indexer failed — Hermes will walk files itself (non-fatal, but slow)"
+# `|| idx_rc=$?` is not cosmetic: under `set -e`, a bare `cmd; rc=$?` ABORTS the script at
+# the failing command, so the rc=3 (empty drop zone) branch below never ran.
+./scripts/hermes-index.sh --quiet && idx_rc=0 || idx_rc=$?
+case "$idx_rc" in
+  0) : ;;
+  3) warn "drop zone không có project hợp lệ nào — Hermes sẽ trả lời 'not in the indexed workspace'.
+  Thêm symlink rồi chạy: ./start-hermes.sh --reindex
+      ln -s ~/Documents/vscode/<ten-project> '$DROPZONE/'" ;;
+  *) warn "indexer lỗi (rc=$idx_rc) — Hermes sẽ tự đi bộ trong thư mục (chậm, phình prompt)" ;;
+esac
 
 # ---------------------------------------------------------------------- 5. bring it up
 printf '%s\n' "→ compose ${compose_args[*]:-up} ..."
