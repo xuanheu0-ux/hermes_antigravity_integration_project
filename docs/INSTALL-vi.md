@@ -19,6 +19,35 @@
 
 Không cần cài Ollama, Python hay Node trên host: model chạy trong container sidecar.
 
+### 0.1 Nếu đây là chiếc laptop trong `2026-06-02/summary.md` (i7-8650U, Ollama chạy bằng systemd)
+
+Bạn cần dọn cấu hình cũ trước, nếu không sẽ có hai Ollama cùng giành cổng 11434:
+
+```bash
+# 1) Xem override cũ có còn dùng biến đã bị bỏ không (in ra dòng OLLAMA_NUM_CTX = đã chết)
+systemctl cat ollama 2>/dev/null | grep -iE "num_ctx|context_length|host"
+
+# 2) Sửa override: sudo systemctl edit ollama  -> dán:
+#      [Service]
+#      Environment="OLLAMA_CONTEXT_LENGTH=16384"
+#      Environment="OLLAMA_HOST=0.0.0.0"
+#      Environment="OLLAMA_KEEP_ALIVE=30m"
+sudo systemctl daemon-reload && sudo systemctl restart ollama
+
+# 3) Xác nhận biến đã thật sự vào process
+systemctl show -p Environment ollama | tr ' ' '
+' | grep OLLAMA_
+```
+
+Chọn **một** trong hai:
+- **Ollama trên host** (vừa sửa ở trên): chạy `./start-hermes.sh` *không* có `--local-llm`, và
+  `base_url=http://host.docker.internal:11434/v1`. `OLLAMA_HOST=0.0.0.0` là **bắt buộc** — mặc định
+  Ollama chỉ nghe `127.0.0.1`, container gọi vào là `connection refused`.
+- **Sidecar trong compose**: dừng Ollama trên host (`sudo systemctl stop --now ollama`) rồi
+  `./start-hermes.sh --local-llm`. Nếu muốn giữ cả hai, đổi cổng publish: `OLLAMA_PORT=11435`
+  trong `.env`, nếu không `docker compose up` sẽ báo
+  `Bind for 127.0.0.1:11434 failed: port is already allocated`.
+
 ---
 
 ## 1. Lấy code **đúng branch đã sửa**
@@ -302,8 +331,10 @@ Backup trước khi đổi máy: `docker exec hermes_local hermes backup` (file 
 **11.2 `connection refused` khi gọi 11434**
 ⇒ Ollama trên host chỉ nghe `127.0.0.1`, container không tới được. Chọn 1 trong 2:
 - dùng sidecar: `./start-hermes.sh --local-llm` (khuyên dùng);
-- hoặc trên host: `OLLAMA_HOST=0.0.0.0 systemctl --user restart ollama` (Linux),
-  rồi `base_url=http://host.docker.internal:11434/v1`.
+- hoặc trên host: `OLLAMA_HOST=0.0.0.0` (systemd: xem mục 0.1), rồi
+  `base_url=http://host.docker.internal:11434/v1`;
+- và lỗi đi kèm thường gặp: `port is already allocated` trên 11434 ⇒ host Ollama và sidecar
+  đang giành cổng. Bỏ `--local-llm`, hoặc đặt `OLLAMA_PORT=11435` trong `.env`.
 
 **11.3 Hermes trả lời lan man, "quên" chỉ dẫn (amnesia)**
 ⇒ context bị cắt. **Không dùng `OLLAMA_NUM_CTX`** — biến đó đã bị bỏ và endpoint `/v1` vứt
