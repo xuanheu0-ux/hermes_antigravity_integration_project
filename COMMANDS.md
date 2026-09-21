@@ -1,5 +1,7 @@
 # Commands
 
+Step-by-step installation (Vietnamese): [`docs/INSTALL-vi.md`](docs/INSTALL-vi.md).
+
 Everything goes through `./start-hermes.sh` (preflight + bootstrap) and the three
 `scripts/*.sh`. The raw `docker` forms are listed too, because they are what the scripts
 run under the hood and you will need them when debugging.

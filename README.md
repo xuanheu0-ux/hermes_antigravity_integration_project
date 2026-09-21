@@ -33,6 +33,10 @@ frame?", "what convention do I use for config in Dien-sc?", "compare the archite
 X and Y" — with citations. Everything stays local: an optional Ollama model, no cloud key,
 read-only mounts, no source leaves the machine.
 
+> **Hướng dẫn cài đặt từng bước, chi tiết, có bảng lỗi thường gặp (tiếng Việt):**
+> [`docs/INSTALL-vi.md`](docs/INSTALL-vi.md) — bao gồm cả kiểm tra sau `clone`, cấp quyền
+> Antigravity, Windows/WSL2, và cách xác minh Ollama thực sự cấp phát đủ context.
+
 ## Quick start
 
 ```bash
