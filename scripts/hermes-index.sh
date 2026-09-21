@@ -22,7 +22,8 @@
 #     --quiet          no stdout
 #     -h|--help
 #
-# Exit codes: 0 ok (or up to date with --check) / 1 stale (--check) or usage error / 2 no drop zone.
+# Exit codes: 0 ok (or up to date with --check) | 1 stale (--check) or usage error |
+#             2 no drop zone | 3 drop zone có mỗi symlink hỏng (index sẽ rỗng).
 # POSIX-ish bash, no GNU-only deps beyond `find`, `sort`, `awk`, `sed`, `git` (optional).
 
 set -eu  # deliberately no `pipefail`: `find | head` and `sort | head`
@@ -114,6 +115,21 @@ if [ "${#find_expr[@]}" -gt 0 ]; then
   PRUNE=( \( \( "${find_expr[@]}" \) -prune \) -o )
 else
   PRUNE=()
+fi
+
+# --- name the silent failure: broken or non-directory entries in the drop zone ----------
+# `for entry in "$DROPZONE"/*/` cannot see a dangling symlink, so without this pass an
+# `ln -s` typo yields an empty INDEX.md and zero clues.
+broken="$(while IFS= read -r l; do
+            [ -n "$l" ] || continue
+            if [ ! -e "$l" ]; then printf '%s -> %s (không tồn tại)\n' "$(basename "$l")" "$(readlink "$l" 2>/dev/null || echo '?')"
+            elif [ ! -d "$l" ]; then printf '%s -> %s (trỏ vào FILE, phải trỏ vào thư mục repo)\n' "$(basename "$l")" "$(readlink "$l" 2>/dev/null || echo '?')"
+            fi
+          done < <(find "$DROPZONE" -mindepth 1 -maxdepth 1 -type l 2>/dev/null))"   # chỉ symlink: file thường ở gốc drop zone (.hermesignore, INDEX.md, README) là hợp lệ
+if [ -n "$broken" ]; then
+  printf 'hermes-index: cảnh báo — bỏ qua các entry sau trong %s:\n%s\n' "$DROPZONE" "$(printf '%s\n' "$broken" | sed 's/^/    /')" >&2
+  printf 'hermes-index:   (dangling symlink là lý do số 1 khiến INDEX.md rỗng)
+' >&2
 fi
 
 # list_files <dir> -> newline list of paths (trailing slash makes find follow a
@@ -223,6 +239,13 @@ done
   echo '```'
 } >> "$tmp"
 
+if [ "$projects" = 0 ]; then
+  printf 'hermes-index: DROP ZONE RỖNG — không project nào hợp lệ trong %s.\n' "$DROPZONE" >&2
+  printf 'hermes-index: Hermes sẽ trả lời "not in the indexed workspace". Thêm repo rồi chạy lại:\n' >&2
+  printf 'hermes-index:   ln -s ~/duong-dan/toi/project "%s/"   roi chay   ./start-hermes.sh --reindex   (tu tho repo root)\n' "$DROPZONE" >&2
+  exit 3
+fi
+
 if [ "$CHECK" = 1 ]; then
   if diff -q <(grep -v '^- generated_utc:' "$tmp") <(grep -v '^- generated_utc:' "$OUT" 2>/dev/null) >/dev/null 2>&1; then
     say "INDEX.md is up to date"
@@ -239,3 +262,4 @@ fi
 
 cat "$tmp" > "$OUT"
 say "wrote $OUT ($projects project(s), $total_files file path(s))"
+

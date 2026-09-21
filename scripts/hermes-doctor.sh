@@ -82,7 +82,7 @@ fi
 if [ ! -d "$DROPZONE" ]; then
   report FAIL dropzone "'$DROPZONE' missing — mkdir it and symlink your projects in"
 else
-  n="$(find "$DROPZONE" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) 2>/dev/null | wc -l | tr -d ' ')"
+  n="$(find "$DROPZONE" -mindepth 1 -maxdepth 1 \( -type d -o \( -type l -xtype d \) \) 2>/dev/null | wc -l | tr -d ' ')"
   [ "${n:-0}" -gt 0 ] && report PASS dropzone "$n project(s) in $DROPZONE" \
                       || report WARN dropzone "empty — Hermes will answer 'not in the indexed workspace'"
   if [ -f "$DROPZONE/INDEX.md" ]; then
@@ -94,6 +94,9 @@ else
   else
     report WARN index "no INDEX.md — run ./scripts/hermes-index.sh (saves ~10k+ prompt tokens)"
   fi
+  bad="$(find "$DROPZONE" -mindepth 1 -maxdepth 1 -type l 2>/dev/null | while IFS= read -r l; do [ -d "$l" ] || printf '%s ' "$(basename "$l")"; done)"
+  if [ -n "$bad" ]; then report WARN dropzone-entries "symlink cụt/không trỏ vào thư mục: $bad — Hermes không index được chúng (chạy ./start-hermes.sh --reindex để xem chi tiết)"
+  else report PASS dropzone-entries "mọi symlink đều trỏ vào thư mục hợp lệ"; fi
   if [ -e "$DROPZONE/AGENTS.md" ]; then report PASS agents-md "drop-zone persona present"
   else report WARN agents-md "no $DROPZONE/AGENTS.md — Hermes has no role instructions"; fi
 fi

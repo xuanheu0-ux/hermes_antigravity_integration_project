@@ -134,9 +134,13 @@ ln -s ~/Documents/vscode/deepseek-harness     hermes_shared_workspace/
 cat hermes_shared_workspace/INDEX.md | head -30
 ```
 
+Nếu indexer in ra `DROP ZONE RỖNG` (mã lỗi **3**) ⇒ đường dẫn trong `ln -s` sai; script sẽ
+liệt kê chính xác symlink nào cụt. `hermes-index.sh --check` trả `1` khi index cũ, `3` khi drop
+zone không còn project hợp lệ nào.
+
 Quy tắc:
 
-- ** symlink, không copy.** Copy sẽ cũ sau 1 tuần và Hermes sẽ trả lời sai một cách tự tin.
+- **symlink, không copy.** Copy sẽ cũ sau 1 tuần và Hermes sẽ trả lời sai một cách tự tin.
 - **Chỉ 3–10 project.** Hermes không cần biết hết mọi thứ; nó cần biết đúng cái bạn hay hỏi.
 - `.env`, `*.pem`, `credentials*` đã nằm trong danh sách loại (`hermes-agent/dropzone/.hermesignore`);
   nhưng đừng biến drop zone thành nơi chứa repo có secret thô.
@@ -365,7 +369,8 @@ docker compose up -d --force-recreate hermes
 **11.6 `env file ... ./.env not found`** ⇒ quên bước 3 (`cp .env.example .env`).
 
 **11.7 "Hermes không biết project X"** ⇒ X không có trong `hermes_shared_workspace/INDEX.md`.
-Thêm symlink → `--reindex`. Đừng tin `.hermesignore` sẽ tự giải quyết (mục 4).
+Kiểm tra nhanh: `ls -lL hermes_shared_workspace/` (symlink cụt sẽ báo lỗi ở bước này),
+`./scripts/hermes-index.sh` (rc=3 = drop zone rỗng/toàn symlink hỏng), rồi `--reindex`. Đừng tin `.hermesignore` sẽ tự giải quyết (mục 4).
 
 **11.8 Pull image bị timeout/chặn mạng** ⇒ Docker Hub không tới được. Thêm mirror trong
 `/etc/docker/daemon.json` (`{"registry-mirrors":["https://<mirror>"]}`) rồi restart docker;

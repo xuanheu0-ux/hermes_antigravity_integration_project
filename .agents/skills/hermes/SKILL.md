@@ -42,6 +42,10 @@ mapping and a stale-index warning.
    ./start-hermes.sh --check          # container, provider, prompt size, Ollama ctx
    ```
 
+   Indexer exit codes: `0` fine · `1` stale (with `--check`) · `2` no drop zone ·
+   `3` drop zone has no valid project (a `ln -s` typo — the indexer names the broken
+   symlink; that is the usual real cause of "Hermes knows nothing").
+
 4. Report answers with the `project/path:line` citations Hermes is instructed to give.
    Verify any file path it quotes before pasting it into an edit — Hermes reads a
    read-only mirror, so its paths are relative to `/workspace/projects`.
