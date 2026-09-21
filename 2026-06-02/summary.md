@@ -1,5 +1,16 @@
 # Summary of Work: June 2, 2026
 
+> [!IMPORTANT]
+> Corrections (2026-09-21) — two claims in this log turned out to be ineffective, and were
+> the source of a later bug hunt. See `2026-09-21/summary.md` and README "Gotchas":
+> 1. §4: `.hermesignore` is **not implemented by Hermes** (open upstream proposals only), so
+>    that file alone never reduced the prompt. The speed-up came from narrowing `terminal.cwd`.
+>    The mechanism is now `scripts/hermes-index.sh` → `INDEX.md`.
+> 2. §3: `OLLAMA_NUM_CTX` is a **legacy variable name** and is dropped by the OpenAI-compatible
+>    `/v1` endpoint Hermes uses. The setting that works is `OLLAMA_CONTEXT_LENGTH`, and it must
+>    be set on the server (verified with `ollama ps` → CONTEXT).
+> 3. The repo was also unbuildable: `hermes-agent` had been committed as a dangling gitlink.
+
 ## Hermes Local Integration Project
 
 Today's session focused entirely on migrating the Hermes AI agent from a remote, paid-API configuration (Google Gemini) into a fully offline, privacy-first local architecture using **Ollama** and **Docker**. We stabilized the environment, fixed context truncation issues, and performed a massive CPU optimization to drastically reduce the agent's inference time.

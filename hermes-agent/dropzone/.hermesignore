@@ -1,0 +1,110 @@
+# Hermes ignore list — paths the drop-zone indexer must never walk or quote.
+#
+# ⚠️ Read this before trusting it: `.hermesignore` is NOT a Hermes Agent feature.
+# It was proposed in upstream issues (NousResearch/hermes-agent #502, #681, #50165)
+# and as of 2026-09-21 a code search for "hermesignore" in that repo returns 0 hits.
+# So Hermes itself ignores this file — the CPU win described in 2026-06-02/summary.md
+# came from nothing more than placing it in the workspace root.
+#
+# What it does do: it is the single source of truth for `scripts/hermes-index.sh`
+# (which builds the small `INDEX.md` that Hermes reads instead of walking ~400k files)
+# and for the container's own view of the drop zone. That is the mechanism that
+# actually keeps the system prompt small.
+#
+# Syntax: one path-segment name or glob per line, matched against directory/file
+# basenames while walking. Blank lines and `#` comments ignored.
+
+# --- dependencies / package caches (the 400k-file offenders) ---
+node_modules/
+bower_components/
+vendor/
+.venv/
+venv/
+env/
+.tox/
+.nox/
+.pnpm-store/
+.uv-cache/
+.site-packages/
+
+# --- VCS + tooling state ---
+.git/
+.git-object-store/
+.svn/
+.hg/
+.vscode/
+.idea/
+.nx/
+.turbo/
+.cache/
+.parcel-cache/
+.vite/
+.next/
+.nuxt/
+.svelte-kit/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage/
+
+# --- build outputs ---
+dist/
+build/
+out/
+target/
+obj/
+Debug/
+Release/
+site-packages/
+__pycache__/
+*.pyc
+*.pyo
+*.o
+*.a
+*.so
+*.min.js
+*.min.css
+*.map
+*.woff2
+*.ttf
+*.pdf
+*.zip
+*.tar
+*.tar.gz
+*.gz
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.mp4
+*.mov
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# --- secrets: never indexed, never quoted, never summarised ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa
+id_ed25519
+credentials
+credentials.json
+service-account*.json
+.secrets
+.netrc
+npm-debug.log*
+
+# --- noise ---
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+tmp/
+coverage/
+htmlcov/
+.coverage

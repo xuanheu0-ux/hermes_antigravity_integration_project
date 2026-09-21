@@ -1,0 +1,18 @@
+# Optional Compose overlay: build a DERIVED Hermes image instead of pulling upstream.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#   ./start-hermes.sh --build          # same thing, with preflight checks
+#
+# Use it when you need to bake extra apt packages, a seeded config.yaml or drop-zone
+# templates into the image. Everything here sits ON TOP of the official image; it does
+# not rebuild Hermes from source (see hermes-agent/Dockerfile for why).
+
+services:
+  hermes:
+    image: hermes-antigravity:${HERMES_IMAGE_TAG:-local}
+    build:
+      context: ./hermes-agent
+      dockerfile: Dockerfile
+      args:
+        HERMES_BASE_IMAGE: ${HERMES_IMAGE:-nousresearch/hermes-agent}
+        HERMES_BASE_TAG: ${HERMES_IMAGE_TAG:-latest}

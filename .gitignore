@@ -1,1 +1,18 @@
+# Secrets. The compose `env_file` and every script read this; never commit it.
 .env
+.env.*
+!.env.example
+!.env.*.example
+
+# The drop zone is a live view of OTHER repos (usually symlinks). It must never enter
+# git: it would either copy whole projects or leak paths/secrets from outside this repo.
+hermes_shared_workspace/
+hermes-data/
+.opt/
+
+# Generated artifacts
+INDEX.md
+*.log
+*.pid
+.DS_Store
+__pycache__/

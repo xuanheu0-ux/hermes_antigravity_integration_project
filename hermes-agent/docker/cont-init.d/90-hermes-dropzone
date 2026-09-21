@@ -1,0 +1,86 @@
+#!/bin/sh
+# s6-overlay cont-init.d hook, runs as ROOT at container boot (before the gateway
+# service starts and before the drop to the `hermes` user).
+#
+# Purpose: make a freshly created container immediately usable as the Antigravity
+# drop-zone indexer, without a manual wizard round-trip.
+#
+# Rules for this file:
+#   - must never fail the boot: s6 aborts the container on a non-zero cont-init exit,
+#     so every step is guarded and we always exit 0.
+#   - must never write into /opt/data as root: root-owned files break later gateway
+#     starts. Anything Hermes-owned is written via `s6-setuidgid hermes`.
+#   - must be idempotent: it runs on EVERY boot, including restarts.
+
+HERMES_HOME="${HERMES_HOME:-/opt/data}"
+DROPZONE="${HERMES_DROPZONE_MOUNT:-/workspace/projects}"
+TEMPLATE_DIR=/opt/hermes-dropzone
+LOG="hermes-dropzone:"
+
+log() { echo "$LOG $*"; }
+
+# --- resolve the hermes binary (the /opt/hermes/bin shim re-execs for root callers) ---
+HERMES_BIN="$(command -v hermes 2>/dev/null || true)"
+[ -n "$HERMES_BIN" ] || HERMES_BIN=/opt/hermes/bin/hermes
+[ -x "$HERMES_BIN" ] || { log "no hermes binary found, skipping seeding"; exit 0; }
+
+as_hermes() {
+  if command -v s6-setuidgid >/dev/null 2>&1; then
+    s6-setuidgid hermes "$@"
+  else
+    # Non-s6 fallback (e.g. `docker run --init`, dispatcher without /init).
+    su -s /bin/sh hermes -c "$(printf '%q ' "$@")" 2>/dev/null || "$@" 2>/dev/null
+  fi
+}
+
+# --- 1. point Hermes at the drop zone instead of its home dir -------------------------
+# terminal.cwd is the real upstream key (see hermes_cli/config_defaults.py). Rooting the
+# session here also scopes `--resume/-c` lookups to this workspace.
+cur="$(as_hermes "$HERMES_BIN" config get terminal.cwd 2>/dev/null || true)"
+case "$cur" in
+  "$DROPZONE") log "terminal.cwd already $DROPZONE" ;;
+  *) as_hermes "$HERMES_BIN" config set terminal.cwd "$DROPZONE" >/dev/null 2>&1 \
+       && log "terminal.cwd -> $DROPZONE" \
+       || log "could not set terminal.cwd; do it manually: docker exec ${HERMES_CONTAINER:-hermes_local} hermes config set terminal.cwd $DROPZONE" ;;
+esac
+
+# --- 2. cap context-file injection so one big AGENTS.md can't bloat every prompt ------
+# context_file_max_chars defaults to unset (= no cap). The drop-zone AGENTS.md is short,
+# but a symlinked project can ship a 70 KB AGENTS.md; on CPU inference that is minutes
+# per token. See `hermes prompt-size` to audit what actually lands in the prompt.
+cur="$(as_hermes "$HERMES_BIN" config get context_file_max_chars 2>/dev/null || true)"
+case "$cur" in
+  ""|0|None|null) as_hermes "$HERMES_BIN" config set context_file_max_chars 6000 >/dev/null 2>&1 \
+       && log "context_file_max_chars -> 6000" ;;
+  *) log "context_file_max_chars already $cur" ;;
+esac
+
+# --- 3. optional: wire the provider non-interactively --------------------------------
+# Only applied when the operator passed explicit endpoint env vars AND no provider is
+# configured yet — never clobber a wizard-made choice.
+if [ -n "${HERMES_MODEL_BASE_URL:-}" ] && [ -n "${HERMES_MODEL_NAME:-}" ]; then
+  provider="$(as_hermes "$HERMES_BIN" config get model.provider 2>/dev/null || true)"
+  if [ -z "$provider" ] || [ "$provider" = "None" ]; then
+    as_hermes "$HERMES_BIN" config set model.provider custom >/dev/null 2>&1 || true
+    as_hermes "$HERMES_BIN" config set model.default "$HERMES_MODEL_NAME" >/dev/null 2>&1 || true
+    as_hermes "$HERMES_BIN" config set model.base_url "$HERMES_MODEL_BASE_URL" >/dev/null 2>&1 || true
+    as_hermes "$HERMES_BIN" config set model.api_key "${HERMES_MODEL_API_KEY:-none}" >/dev/null 2>&1 || true
+    log "provider -> custom ($HERMES_MODEL_NAME @ $HERMES_MODEL_BASE_URL)"
+  else
+    log "provider already '$provider', leaving config.yaml alone"
+  fi
+fi
+
+# --- 4. seed the drop-zone README/instructions when it is writable --------------------
+# The projects mount is :ro by design (Hermes must not edit your repos), so this is a
+# best-effort convenience for read-write setups only.
+if [ -d "$TEMPLATE_DIR" ] && [ -d "$DROPZONE" ]; then
+  for f in AGENTS.md .hermesignore; do
+    if [ ! -e "$DROPZONE/$f" ]; then
+      cp "$TEMPLATE_DIR/$f" "$DROPZONE/$f" 2>/dev/null \
+        || log "drop zone is read-only; seed '$f' from the host instead (start-hermes.sh does this)"
+    fi
+  done
+fi
+
+exit 0
