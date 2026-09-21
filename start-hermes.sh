@@ -78,8 +78,14 @@ read_env() {   # read one KEY from .env as plain data (no sourcing, no eval)
   printf '%s' "$val"
 }
 
-CONTAINER="$(read_env HERMES_CONTAINER)"; CONTAINER="${CONTAINER:-hermes_local}"
-DROPZONE="$(read_env HERMES_DROPZONE)"; DROPZONE="${DROPZONE:-./hermes_shared_workspace}"
+# Precedence: process env > .env > built-in default (so a caller can override per run).
+pick() {   # pick <KEY> <default>
+  local name="$1" def="$2" v
+  v="${!name:-}"; [ -n "$v" ] || v="$(read_env "$name")"; [ -n "$v" ] || v="$def"
+  printf '%s' "$v"
+}
+CONTAINER="$(pick HERMES_CONTAINER hermes_local)"
+DROPZONE="$(pick HERMES_DROPZONE ./hermes_shared_workspace)"
 case "$DROPZONE" in /*) : ;; *) DROPZONE="./${DROPZONE#./}" ;; esac
 OLLAMA_MODEL="$(pick OLLAMA_MODEL llama3.2:3b)"
 compose_args=()
@@ -180,6 +186,25 @@ if [ "$LOCAL_LLM" = 1 ]; then
   docker exec "$CONTAINER" hermes config set model.base_url "http://ollama:11434/v1" >/dev/null 2>&1 || true
   docker exec "$CONTAINER" hermes config set model.default "$OLLAMA_MODEL" >/dev/null 2>&1 || true
   docker exec "$CONTAINER" hermes config set model.api_key none >/dev/null 2>&1 || true
+fi
+
+# ------------------------------- 6b. prompt-size guardrails (any provider, idempotent) --
+# Same two settings the derived image seeds, applied here too so the default
+# pull-based path gets the benefit: scope the session to the drop zone, and cap how much
+# of an injected context file can land in the prompt. Audit with `hermes prompt-size`.
+if docker exec "$CONTAINER" hermes --version >/dev/null 2>&1; then
+  if [ "$(docker exec "$CONTAINER" hermes config get terminal.cwd 2>/dev/null | tr -d '[:space:]')" = "/workspace/projects" ]; then
+    ok "terminal.cwd already scoped to /workspace/projects"
+  else
+    docker exec "$CONTAINER" hermes config set terminal.cwd /workspace/projects >/dev/null 2>&1 \
+      && ok "terminal.cwd -> /workspace/projects (this, not .hermesignore, is what shrinks the prompt)" \
+      || warn "could not set terminal.cwd; run: docker exec $CONTAINER hermes config set terminal.cwd /workspace/projects"
+  fi
+  case "$(docker exec "$CONTAINER" hermes config get context_file_max_chars 2>/dev/null | tr -d '[:space:]')" in
+    ""|None|null|0) docker exec "$CONTAINER" hermes config set context_file_max_chars 6000 >/dev/null 2>&1 \
+                      && ok "context_file_max_chars -> 6000 (one giant AGENTS.md can no longer eat the context window)" ;;
+    *) : ;;
+  esac
 fi
 
 cat <<NEXT

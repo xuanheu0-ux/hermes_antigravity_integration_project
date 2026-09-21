@@ -71,7 +71,9 @@ banner, no port, no key) with an opt-in HTTP transport against the gateway API s
 ### 6. Scripts (and how they were tested without Docker)
 
 `start-hermes.sh` (preflight → `.env` → gitlink regression guard → drop-zone seeding →
-indexing → `compose config` validation → up → readiness poll → provider wiring),
+indexing → `compose config` validation → up → readiness poll → provider wiring →
+`terminal.cwd` / `context_file_max_chars` guardrails, applied on the pull-based path too
+and not only by the derived image's cont-init hook),
 `scripts/hermes-index.sh`, `scripts/hermes-ask.sh`, `scripts/hermes-doctor.sh`.
 
 A mock `docker` on `PATH` exercised all four end to end and caught four real bugs in the new
